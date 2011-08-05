@@ -4,6 +4,9 @@ import gmpy
 from time import time
 import random
 
+itercount = 0
+tests     = 0
+
 class ecc:
     def __init__(self, a4, a6, mod):
         self.a4 = mfi(a4, mod)
@@ -106,6 +109,62 @@ class ecc:
             accum = self.add(accum[0], accum[1], x1, y1)
         return accum
 
+class ecc_pollardrho:
+    def __init__(self, curve, order):
+        self.curve = curve
+        self.order = order  
+
+    def next_x(self, xi, p, q):
+        x = xi[0]
+        y = xi[1]
+        if x >= 0 and x <= self.curve.mod / 3: return self.curve.add(q[0], q[1], x, y)
+        elif x > self.curve.mod / 3 and x <= (self.curve.mod * 2)/3: return self.curve.double(x, y)
+        else: return self.curve.add(p[0], p[1], x, y)
+
+    def next_a(self, a, xi):
+        x = xi[0]
+        a = mfi(a, self.order)
+        if x >= 0 and x <= self.curve.mod / 3: return a
+        elif x > self.curve.mod / 3 and x <= (self.curve.mod * 2) /3: return a * 2
+        else: return a + 1 
+  
+    def next_b(self, b, xi):
+        x = xi[0]
+        b = mfi(b, self.order)
+        if x >= 0 and x <= self.curve.mod / 3: return b+1
+        elif x > self.curve.mod / 3 and x <= (self.curve.mod * 2) / 3: return b * 2
+        else: return b 
+    
+    def solve(self, p, q):
+        global itercount
+        next_x = self.next_x
+        next_a = self.next_a
+        next_b = self.next_b
+        global tests
+        tests += 1
+        xi = (0,1)
+        a = mfi(0, self.order)
+        b = mfi(0, self.order)
+        x2i = (0,1)
+        a2 = mfi(0, self.order)
+        b2 = mfi(0, self.order)
+        while True:
+            old_xi = xi
+            xi = next_x(xi, p, q)
+            a = next_a(a, old_xi)
+            b = next_b(b, old_xi)
+
+            old_x2i = x2i
+            x2i = next_x(next_x(x2i, p, q), p, q)
+            a2  = next_a(next_a(a2, old_x2i), next_x(old_x2i, p, q))
+            b2  = next_b(next_b(b2, old_x2i), next_x(old_x2i, p, q))
+            itercount += 1
+            if (xi == x2i):
+                print a,b,a2,b2
+                r = mfi(b-b2, self.order).modinv()
+                p = mfi(a2-a, self.order)
+                print 'iterations', itercount
+                return p * r
 
 if __name__ == "__main__":
     x = []
@@ -113,13 +172,17 @@ if __name__ == "__main__":
     curve = ecc(2147483656,2060571714,2147483659)
     p = (1466500883, 1666020463)
     assert p in curve.get_point(p[0])
-    q = (873198119, 717233109)
-    assert q in curve.get_point(q[0])
-    r = (1864484320, 414554908)
-    assert r in curve.get_point(r[0])
-    assert curve.add(p[0], p[1], q[0], q[1]) == (r[0], r[1])
-    point = curve.get_random_point()
-    assert curve.is_valid_point(point[0],point[1])
-    point2 = curve.multiply(point[0],point[1], random.randint(1,5))
-    assert curve.is_valid_point(point2[0],point2[1])
-    print "Everything works"
+    bigorder = 2147440849
+    pr = ecc_pollardrho(curve, bigorder)
+    a = p
+    for i in xrange(0,10):
+      d = random.randint(0, 100)    
+      print 'multiplying'
+      b = curve.multiply(a[0], a[1], d)
+      print 'done multiplying'
+      assert curve.is_valid_point(b[0], b[1])
+      print 'starting solve'
+      print pr.solve(a, b), d
+      print 'finishing solve'
+    print itercount
+    print tests
